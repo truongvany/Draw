@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>🎨 Cùng Vẽ Trực Tuyến</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #fff0f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #controls {
+      margin: 10px;
+    }
+
+    canvas {
+      border: 2px solid pink;
+      background: #ffffff;
+      cursor: crosshair;
+    }
+  </style>
+</head>
+<body>
+  <h2>🖌️ Cùng nhau vẽ nè!</h2>
+
+  <div id="controls">
+    Màu: <input type="color" id="colorPicker" value="#000000">
+    Nét: <input type="range" id="sizePicker" min="1" max="20" value="3">
+    <button onclick="clearCanvas()">🧽 Xoá bảng</button>
+  </div>
+
+  <canvas id="board" width="800" height="600"></canvas>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const colorPicker = document.getElementById('colorPicker');
+    const sizePicker = document.getElementById('sizePicker');
+
+    let drawing = false;
+
+    canvas.addEventListener('mousedown', () => drawing = true);
+    canvas.addEventListener('mouseup', () => drawing = false);
+    canvas.addEventListener('mouseout', () => drawing = false);
+
+    canvas.addEventListener('mousemove', e => {
+      if (!drawing) return;
+      const x = e.offsetX;
+      const y = e.offsetY;
+      const color = colorPicker.value;
+      const size = sizePicker.value;
+
+      drawCircle(x, y, size, color);
+      socket.emit('draw', { x, y, size, color });
+    });
+
+    socket.on('draw', ({ x, y, size, color }) => {
+      drawCircle(x, y, size, color);
+    });
+
+    socket.on('clear', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
+    function drawCircle(x, y, size, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      socket.emit('clear');
+    }
+  </script>
+</body>
+</html>
