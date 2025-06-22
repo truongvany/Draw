@@ -1,83 +1,172 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>🎨 Cùng Vẽ Trực Tuyến</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cùng nhau vẽ nè!</title>
   <style>
     body {
       margin: 0;
-      font-family: sans-serif;
-      background: #fff0f5;
+      padding: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
+      background-color: #f0f0f0;
+      font-family: Arial, sans-serif;
     }
-
-    #controls {
-      margin: 10px;
+    #drawingCanvas {
+      border: 1px solid #000;
+      background-color: #fff;
+      width: 100%;
+      max-width: 800px;
+      height: auto;
+      aspect-ratio: 1;
     }
-
-    canvas {
-      border: 2px solid pink;
-      background: #ffffff;
-      cursor: crosshair;
+    .controls {
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #fff;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    }
+    .controls label {
+      margin-right: 10px;
+    }
+    .controls input[type="color"],
+    .controls input[type="range"] {
+      vertical-align: middle;
+    }
+    #clear {
+      padding: 5px 10px;
+      background-color: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    #clear:hover {
+      background-color: #cc0000;
     }
   </style>
 </head>
 <body>
   <h2>🖌️ Cùng nhau vẽ nè!</h2>
-
-  <div id="controls">
-    Màu: <input type="color" id="colorPicker" value="#000000">
-    Nét: <input type="range" id="sizePicker" min="1" max="20" value="3">
-    <button onclick="clearCanvas()">🧽 Xoá bảng</button>
+  <div class="controls">
+    Màu: <input type="color" id="color" value="#000000">
+    Nét: <input type="range" id="lineWidth" min="1" max="20" value="5">
+    <button id="clear">🧽 Xoá bảng</button>
   </div>
-
-  <canvas id="board" width="800" height="600"></canvas>
+  <canvas id="drawingCanvas"></canvas>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
-    const canvas = document.getElementById('board');
+    const canvas = document.getElementById('drawingCanvas');
     const ctx = canvas.getContext('2d');
-    const colorPicker = document.getElementById('colorPicker');
-    const sizePicker = document.getElementById('sizePicker');
+    const colorInput = document.getElementById('color');
+    const lineWidthInput = document.getElementById('lineWidth');
+    const socket = io();
+
+    // Đặt kích thước canvas dựa trên màn hình
+    function resizeCanvas() {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.width; // Giữ tỷ lệ 1:1
+      redraw(); // Vẽ lại khi thay đổi kích thước
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
     let drawing = false;
+    let currentX, currentY;
 
-    canvas.addEventListener('mousedown', () => drawing = true);
-    canvas.addEventListener('mouseup', () => drawing = false);
-    canvas.addEventListener('mouseout', () => drawing = false);
+    // Sự kiện chuột (máy tính)
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseout', stopDrawing);
 
-    canvas.addEventListener('mousemove', e => {
+    // Sự kiện cảm ứng (điện thoại)
+    canvas.addEventListener('touchstart', startDrawingTouch, { passive: false });
+    canvas.addEventListener('touchmove', drawTouch, { passive: false });
+    canvas.addEventListener('touchend', stopDrawingTouch, { passive: false });
+
+    function startDrawing(e) {
+      drawing = true;
+      [currentX, currentY] = [e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop];
+    }
+
+    function draw(e) {
       if (!drawing) return;
-      const x = e.offsetX;
-      const y = e.offsetY;
-      const color = colorPicker.value;
-      const size = sizePicker.value;
+      const newX = e.clientX - canvas.offsetLeft;
+      const newY = e.clientY - canvas.offsetTop;
+      ctx.beginPath();
+      ctx.moveTo(currentX, currentY);
+      ctx.lineTo(newX, newY);
+      ctx.strokeStyle = colorInput.value;
+      ctx.lineWidth = lineWidthInput.value;
+      ctx.stroke();
+      [currentX, currentY] = [newX, newY];
+      socket.emit('draw', { x: newX, y: newY, color: colorInput.value, width: lineWidthInput.value });
+    }
 
-      drawCircle(x, y, size, color);
-      socket.emit('draw', { x, y, size, color });
+    function stopDrawing() {
+      drawing = false;
+    }
+
+    // Sự kiện cảm ứng
+    function startDrawingTouch(e) {
+      e.preventDefault(); // Ngăn cuộn trang
+      drawing = true;
+      const touch = e.touches[0];
+      [currentX, currentY] = [touch.clientX - canvas.offsetLeft, touch.clientY - canvas.offsetTop];
+    }
+
+    function drawTouch(e) {
+      e.preventDefault(); // Ngăn cuộn trang
+      if (!drawing) return;
+      const touch = e.touches[0];
+      const newX = touch.clientX - canvas.offsetLeft;
+      const newY = touch.clientY - canvas.offsetTop;
+      ctx.beginPath();
+      ctx.moveTo(currentX, currentY);
+      ctx.lineTo(newX, newY);
+      ctx.strokeStyle = colorInput.value;
+      ctx.lineWidth = lineWidthInput.value;
+      ctx.stroke();
+      [currentX, currentY] = [newX, newY];
+      socket.emit('draw', { x: newX, y: newY, color: colorInput.value, width: lineWidthInput.value });
+    }
+
+    function stopDrawingTouch(e) {
+      e.preventDefault(); // Ngăn cuộn trang
+      drawing = false;
+    }
+
+    // Vẽ lại khi nhận dữ liệu từ server
+    socket.on('draw', (data) => {
+      ctx.beginPath();
+      ctx.moveTo(currentX, currentY);
+      ctx.lineTo(data.x, data.y);
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.width;
+      ctx.stroke();
+      [currentX, currentY] = [data.x, data.y];
     });
 
-    socket.on('draw', ({ x, y, size, color }) => {
-      drawCircle(x, y, size, color);
+    // Xóa bảng
+    document.getElementById('clear').addEventListener('click', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      socket.emit('clear');
     });
 
     socket.on('clear', () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
 
-    function drawCircle(x, y, size, color) {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    function clearCanvas() {
+    // Hàm vẽ lại khi thay đổi kích thước
+    function redraw() {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      socket.emit('clear');
+      ctx.putImageData(imageData, 0, 0);
     }
   </script>
 </body>
