@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cùng nhau vẽ nè!</title>
+  <title>Cùng nhau vẽ Mặt Trăng nè!</title>
   <style>
     body {
       margin: 0;
@@ -50,7 +50,7 @@
   </style>
 </head>
 <body>
-  <h2>🖌️ Cùng nhau vẽ nè!</h2>
+  <h2>🖌️ Cùng nhau vẽ Mặt Trăng nè!</h2>
   <div class="controls">
     Màu: <input type="color" id="color" value="#000000">
     Nét: <input type="range" id="lineWidth" min="1" max="20" value="5">
@@ -66,10 +66,13 @@
     const lineWidthInput = document.getElementById('lineWidth');
     const socket = io();
 
-    // Đặt kích thước canvas dựa trên màn hình
+    // Đặt kích thước canvas và chuẩn hóa tỷ lệ
     function resizeCanvas() {
-      canvas.width = canvas.offsetWidth;
+      const dpr = window.devicePixelRatio || 1; // Lấy tỷ lệ pixel của thiết bị
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
       canvas.height = canvas.width; // Giữ tỷ lệ 1:1
+      ctx.scale(dpr, dpr); // Điều chỉnh tỷ lệ vẽ
       redraw(); // Vẽ lại khi thay đổi kích thước
     }
     window.addEventListener('resize', resizeCanvas);
@@ -77,6 +80,13 @@
 
     let drawing = false;
     let currentX, currentY;
+    let canvasRect = canvas.getBoundingClientRect(); // Lấy kích thước canvas
+
+    // Cập nhật kích thước canvas khi thay đổi
+    function updateCanvasRect() {
+      canvasRect = canvas.getBoundingClientRect();
+    }
+    window.addEventListener('resize', updateCanvasRect);
 
     // Sự kiện chuột (máy tính)
     canvas.addEventListener('mousedown', startDrawing);
@@ -91,21 +101,16 @@
 
     function startDrawing(e) {
       drawing = true;
-      [currentX, currentY] = [e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop];
+      updateCanvasRect();
+      [currentX, currentY] = [e.clientX - canvasRect.left, e.clientY - canvasRect.top];
     }
 
     function draw(e) {
       if (!drawing) return;
-      const newX = e.clientX - canvas.offsetLeft;
-      const newY = e.clientY - canvas.offsetTop;
-      ctx.beginPath();
-      ctx.moveTo(currentX, currentY);
-      ctx.lineTo(newX, newY);
-      ctx.strokeStyle = colorInput.value;
-      ctx.lineWidth = lineWidthInput.value;
-      ctx.stroke();
+      const newX = e.clientX - canvasRect.left;
+      const newY = e.clientY - canvasRect.top;
+      drawLine(currentX, currentY, newX, newY);
       [currentX, currentY] = [newX, newY];
-      socket.emit('draw', { x: newX, y: newY, color: colorInput.value, width: lineWidthInput.value });
     }
 
     function stopDrawing() {
@@ -114,42 +119,64 @@
 
     // Sự kiện cảm ứng
     function startDrawingTouch(e) {
-      e.preventDefault(); // Ngăn cuộn trang
+      e.preventDefault();
       drawing = true;
+      updateCanvasRect();
       const touch = e.touches[0];
-      [currentX, currentY] = [touch.clientX - canvas.offsetLeft, touch.clientY - canvas.offsetTop];
+      [currentX, currentY] = [touch.clientX - canvasRect.left, touch.clientY - canvasRect.top];
     }
 
     function drawTouch(e) {
-      e.preventDefault(); // Ngăn cuộn trang
+      e.preventDefault();
       if (!drawing) return;
       const touch = e.touches[0];
-      const newX = touch.clientX - canvas.offsetLeft;
-      const newY = touch.clientY - canvas.offsetTop;
-      ctx.beginPath();
-      ctx.moveTo(currentX, currentY);
-      ctx.lineTo(newX, newY);
-      ctx.strokeStyle = colorInput.value;
-      ctx.lineWidth = lineWidthInput.value;
-      ctx.stroke();
+      const newX = touch.clientX - canvasRect.left;
+      const newY = touch.clientY - canvasRect.top;
+      drawLine(currentX, currentY, newX, newY);
       [currentX, currentY] = [newX, newY];
-      socket.emit('draw', { x: newX, y: newY, color: colorInput.value, width: lineWidthInput.value });
     }
 
     function stopDrawingTouch(e) {
-      e.preventDefault(); // Ngăn cuộn trang
+      e.preventDefault();
       drawing = false;
     }
 
-    // Vẽ lại khi nhận dữ liệu từ server
-    socket.on('draw', (data) => {
+    // Hàm vẽ đường thẳng và gửi dữ liệu
+    function drawLine(x1, y1, x2, y2) {
       ctx.beginPath();
-      ctx.moveTo(currentX, currentY);
-      ctx.lineTo(data.x, data.y);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = colorInput.value;
+      ctx.lineWidth = lineWidthInput.value;
+      ctx.stroke();
+      // Gửi tọa độ chuẩn hóa (tỷ lệ 0-1 dựa trên kích thước canvas)
+      const normalizedX1 = x1 / canvas.width;
+      const normalizedY1 = y1 / canvas.height;
+      const normalizedX2 = x2 / canvas.width;
+      const normalizedY2 = y2 / canvas.height;
+      socket.emit('draw', {
+        x1: normalizedX1,
+        y1: normalizedY1,
+        x2: normalizedX2,
+        y2: normalizedY2,
+        color: colorInput.value,
+        width: lineWidthInput.value
+      });
+    }
+
+    // Nhận dữ liệu từ server và vẽ
+    socket.on('draw', (data) => {
+      const x1 = data.x1 * canvas.width;
+      const y1 = data.y1 * canvas.height;
+      const x2 = data.x2 * canvas.width;
+      const y2 = data.y2 * canvas.height;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
       ctx.strokeStyle = data.color;
       ctx.lineWidth = data.width;
       ctx.stroke();
-      [currentX, currentY] = [data.x, data.y];
+      [currentX, currentY] = [x2, y2];
     });
 
     // Xóa bảng
