@@ -9,11 +9,11 @@ const io = new Server(server);  // 👈 Dòng này KHỞI TẠO biến io
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 👇 KHÔNG ĐƯỢC viết io.on trước dòng khởi tạo io!
 io.on('connection', (socket) => {
-  console.log('🟢 Ai đó vừa kết nối');
+  console.log('A user connected:', socket.id);
 
   socket.on('draw', (data) => {
+    // Chuyển tiếp dữ liệu đến tất cả client
     socket.broadcast.emit('draw', data);
   });
 
@@ -22,7 +22,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('🔴 Người dùng rời khỏi');
+    console.log('User disconnected:', socket.id);
   });
 });
 
